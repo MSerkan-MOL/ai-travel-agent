@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seyahat Asistanı</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+
+
+
+</head>
+
+<body>
+    <div class="app-container">
+        <div class="chat-container">
+            <div class="chat-header">
+                <h1>Seyahat Asistanı ✈️</h1>
+                <p>Hava durumu ve otel bilgisi için benimle sohbet edin</p>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                <div class="welcome-message">
+                    <h2>Merhaba! 👋</h2>
+                    <p>Size nasıl yardımcı olabilirim?</p>
+                    <div class="suggestion-chips">
+                        <div class="chip" onclick="sendMessage('İstanbul\'da 4 yıldızlı otel ara')">İstanbul otelleri
+                        </div>
+                        <div class="chip" onclick="sendMessage('Paris\'te otel bul')">Paris otelleri</div>
+                        <div class="chip" onclick="sendMessage('Ankara hava durumu')">Hava durumu</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-container">
+                <div class="chat-input-wrapper">
+                    <input type="text" class="chat-input" id="userInput" placeholder="Mesajınızı yazın..."
+                        onkeypress="handleKeyPress(event)">
+                    <button class="send-button" id="sendButton" onclick="sendMessage()">
+                        ➤
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="results-panel" id="resultsPanel">
+            <div class="results-header">
+                <h2>📋 Sonuçlar</h2>
+            </div>
+            <div class="results-content" id="resultsContent">
+                <div class="empty-state">
+                    <div class="empty-icon">🔍</div>
+                    <p>Otel veya hava durumu araması yapın, sonuçlar burada görünecek.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatMessages = document.getElementById('chatMessages');
+        const userInput = document.getElementById('userInput');
+        const sendButton = document.getElementById('sendButton');
+        const resultsContent = document.getElementById('resultsContent');
+
+        let ws = null;
+
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:8002/ws');
+
+            ws.onopen = function () {
+                console.log('WebSocket bağlantısı kuruldu');
+            };
+
+            ws.onmessage = function (event) {
+                removeTypingIndicator();
+                const data = JSON.parse(event.data);
+                console.log('Received WebSocket message:', data);
+
+                if (data.type === 'message') {
+                    addMessage(data.content, 'assistant');
+                } else if (data.type === 'weather') {
+                    addWeatherToPanel(data.data);
+                    addMessage('Hava durumu bilgisi sağ panelde görüntüleniyor.', 'assistant');
+                } else if (data.type === 'hotels') {
+                    console.log('Hotel data received:', data.data);
+                    addHotelsToPanel(data.data);
+                    addMessage('Otel sonuçları sağ panelde görüntüleniyor.', 'assistant');
+                } else if (data.type === 'flights') {
+                    console.log('Flight data received:', data.data);
+                    addFlightsToPanel(data.data);
+                    addMessage('Uçuş sonuçları sağ panelde görüntüleniyor.', 'assistant');
+                } else if (data.type === 'error') {
+                    addMessage(data.content, 'assistant');
+                }
+            };
+
+            ws.onerror = function (error) {
+                console.error('WebSocket hatası:', error);
+                removeTypingIndicator();
+                addMessage('Bağlantı hatası. Lütfen tekrar deneyin.', 'assistant');
+            };
+
+            ws.onclose = function () {
+                console.log('WebSocket bağlantısı kapandı');
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+
+        connectWebSocket();
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function sendMessage(predefinedMessage) {
+            const message = predefinedMessage || userInput.value.trim();
+
+            if (!message || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+            const welcomeMsg = document.querySelector('.welcome-message');
+            if (welcomeMsg) {
+                welcomeMsg.remove();
+            }
+
+            addMessage(message, 'user');
+            userInput.value = '';
+
+            showTypingIndicator();
+
+            ws.send(JSON.stringify({
+                message: message
+            }));
+        }
+
+        // Markdown'ı HTML'e çeviren basit parser
+        function parseMarkdown(text) {
+            // Önce HTML karakterlerini escape et
+            text = text.replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+
+            // Bold **text**
+            text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+            // Italic *text*
+            text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+            // Bullet points - multi-line
+            text = text.replace(/^[•\-\*]\s+(.+)$/gm, '<li>$1</li>');
+
+            // Wrap consecutive list items in ul
+            text = text.replace(/(<li>.*<\/li>\s*)+/gs, function (match) {
+                return '<ul style="margin: 8px 0; padding-left: 20px;">' + match + '</ul>';
+            });
+
+            // Line breaks
+            text = text.replace(/\n/g, '<br>');
+
+            // Numbered lists
+            text = text.replace(/^(\d+)\.\s+(.+)$/gm, '<li>$2</li>');
+
+            // Headers (örn: ## Başlık)
+            text = text.replace(/^##\s+(.+)$/gm, '<h3 style="margin: 8px 0; font-size: 16px;">$1</h3>');
+
+            return text;
+        }
+
+        function addMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+
+            // Assistant mesajları için markdown dönüşümü yap
+            const content = sender === 'assistant' ? parseMarkdown(text) : text;
+
+            if (sender === 'assistant') {
+                messageDiv.innerHTML = `
+                <div class="message-avatar">🤖</div>
+                <div class="message-content">${content}</div>
+            `;
+            } else {
+                messageDiv.innerHTML = `
+                <div class="message-content">${text}</div>
+                <div class="message-avatar">👤</div>
+            `;
+            }
+
+            chatMessages.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        function addWeatherCard(data) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant';
+
+            messageDiv.innerHTML = `
+            <div class="message-avatar">🤖</div>
+            <div class="message-content">
+                <div class="weather-card">
+                    <div class="city">${data.city}</div>
+                    <div class="temp">${Math.round(data.temperature)}°C</div>
+                    <div class="description">${data.description}</div>
+                    <div class="details">
+                        <span>Hissedilen: ${Math.round(data.feels_like)}°C</span>
+                        <span>Nem: ${data.humidity}%</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+            chatMessages.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        function addHotelCards(data) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant';
+
+            const currencySymbol = data.currency_symbol || '$';
+
+            let hotelsHtml = `<div class="hotels-container">`;
+            hotelsHtml += `<div class="hotels-header">${data.location} için bulunan oteller</div>`;
+
+            if (data.hotels && data.hotels.length > 0) {
+                hotelsHtml += `<div class="hotels-grid">`;
+
+                data.hotels.forEach((hotel, index) => {
+                    hotelsHtml += `
+                        <div class="hotel-card">
+                            <div class="hotel-image-placeholder"></div>
+                            <div class="hotel-card-content">
+                                <div class="hotel-name">${hotel.name || 'İsimsiz Otel'}</div>
+                                
+                                ${hotel.overall_rating ? `
+                                    <div class="hotel-rating">
+                                        <span class="hotel-stars">⭐ ${hotel.overall_rating}</span>
+                                        ${hotel.reviews ? `<span class="hotel-reviews">(${hotel.reviews} değerlendirme)</span>` : ''}
+                                    </div>
+                                ` : ''}
+                                
+                                ${hotel.hotel_class ? `
+                                    <div class="hotel-class">${hotel.hotel_class}</div>
+                                ` : ''}
+                                
+                                ${hotel.rate_per_night || hotel.total_rate ? `
+                                    <div class="hotel-price">${currencySymbol}${hotel.rate_per_night || hotel.total_rate}</div>
+                                    <div class="hotel-price-label">gecelik</div>
+                                ` : ''}
+                                
+                                ${hotel.amenities && hotel.amenities.length > 0 ? `
+                                    <div class="hotel-amenities">
+                                        ${hotel.amenities.slice(0, 4).map(amenity => `
+                                            <span class="amenity-tag">${amenity}</span>
+                                        `).join('')}
+                                    </div>
+                                ` : ''}
+                                
+                                ${hotel.latitude && hotel.longitude ? `
+                                    <a href="https://www.google.com/maps/search/?api=1&query=${hotel.latitude},${hotel.longitude}" target="_blank" class="map-button">
+                                        📍 Haritada Gör
+                                    </a>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                hotelsHtml += `</div>`;
+            } else {
+                hotelsHtml += `<p style="color: #6b7280; text-align: center; padding: 20px;">Üzgünüm, otel bulunamadı.</p>`;
+            }
+
+            hotelsHtml += `</div>`;
+
+            messageDiv.innerHTML = `
+                <div class="message-avatar">🤖</div>
+                <div class="message-content" style="max-width: 100%;">
+                    ${hotelsHtml}
+                </div>
+            `;
+
+            chatMessages.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        // YENİ FONKSİYONLAR - Sonuçları sağ panelde göster
+        function addWeatherToPanel(data) {
+            // Sadece empty state'i temizle, diğer sonuçları koru
+            const emptyState = resultsContent.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+
+            // Results panel'i göster
+            const resultsPanel = document.getElementById('resultsPanel');
+            resultsPanel.classList.add('visible');
+
+            // Eğer zaten weather card varsa güncelle, yoksa yeni ekle
+            let weatherDiv = resultsContent.querySelector('.weather-card');
+            if (!weatherDiv) {
+                weatherDiv = document.createElement('div');
+                weatherDiv.className = 'weather-card';
+                weatherDiv.style.marginBottom = '16px';
+                // Weather card'ı en üste ekle
+                resultsContent.insertBefore(weatherDiv, resultsContent.firstChild);
+            }
+
+            weatherDiv.innerHTML = `
+                <div class="city">${data.city}</div>
+                <div class="temp">${Math.round(data.temperature)}°C</div>
+                <div class="description">${data.description}</div>
+                <div class="details">
+                    <span>Hissedilen: ${Math.round(data.feels_like)}°C</span>
+                    <span>Nem: ${data.humidity}%</span>
+                </div>
+            `;
+        }
+
+        function addHotelsToPanel(data) {
+            // Sadece empty state'i temizle, diğer sonuçları koru
+            const emptyState = resultsContent.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+
+            // Results panel'i göster
+            const resultsPanel = document.getElementById('resultsPanel');
+            resultsPanel.classList.add('visible');
+
+            // Eski hotel sonuçlarını kaldır (yeni sonuçlar eklenecek)
+            const oldHotels = resultsContent.querySelector('.hotels-container');
+            if (oldHotels) {
+                oldHotels.remove();
+            }
+
+            const currencySymbol = data.currency_symbol || '$';
+
+            let hotelsHtml = `<div class="hotels-container">`;
+            hotelsHtml += `<div class="hotels-header">${data.location} için bulunan oteller</div>`;
+
+            if (data.hotels && data.hotels.length > 0) {
+                hotelsHtml += `<div class="hotels-grid">`;
+
+                data.hotels.forEach((hotel, index) => {
+                    hotelsHtml += `
+                        <div class="hotel-card">
+                            <div class="hotel-image-placeholder"></div>
+                            <div class="hotel-card-content">
+                                <div class="hotel-name">${hotel.name || 'İsimsiz Otel'}</div>
+                                
+                                ${hotel.overall_rating ? `
+                                    <div class="hotel-rating">
+                                        <span class="hotel-stars">⭐ ${hotel.overall_rating}</span>
+                                        ${hotel.reviews ? `<span class="hotel-reviews">(${hotel.reviews} değerlendirme)</span>` : ''}
+                                    </div>
+                                ` : ''}
+                                
+                                ${hotel.hotel_class ? `
+                                    <div class="hotel-class">${hotel.hotel_class}</div>
+                                ` : ''}
+                                
+                                ${hotel.rate_per_night || hotel.total_rate ? `
+                                    <div class="hotel-price">${currencySymbol}${hotel.rate_per_night || hotel.total_rate}</div>
+                                    <div class="hotel-price-label">gecelik</div>
+                                ` : ''}
+                                
+                                ${hotel.amenities && hotel.amenities.length > 0 ? `
+                                    <div class="hotel-amenities">
+                                        ${hotel.amenities.slice(0, 4).map(amenity => `
+                                            <span class="amenity-tag">${amenity}</span>
+                                        `).join('')}
+                                    </div>
+                                ` : ''}
+                                
+                                ${hotel.latitude && hotel.longitude ? `
+                                    <a href="https://www.google.com/maps/search/?api=1&query=${hotel.latitude},${hotel.longitude}" target="_blank" class="map-button">
+                                        📍 Haritada Gör
+                                    </a>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                hotelsHtml += `</div>`;
+            } else {
+                hotelsHtml += `<p style="color: #6b7280; text-align: center; padding: 20px;">Üzgünüm, otel bulunamadı.</p>`;
+            }
+
+            hotelsHtml += `</div>`;
+
+            // Append etmek yerine yeni div oluştur
+            const hotelsContainer = document.createElement('div');
+            hotelsContainer.innerHTML = hotelsHtml;
+            resultsContent.appendChild(hotelsContainer.firstChild);
+        }
+
+        function addFlightsToPanel(data) {
+            // Sadece empty state'i temizle
+            const emptyState = resultsContent.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+
+            // Results panel'i göster
+            const resultsPanel = document.getElementById('resultsPanel');
+            resultsPanel.classList.add('visible');
+
+            // Eski flight sonuçlarını kaldır
+            const oldFlights = resultsContent.querySelector('.flights-container');
+            if (oldFlights) {
+                oldFlights.remove();
+            }
+
+            const currencySymbol = data.currency_symbol || '₺';
+
+            let flightsHtml = `<div class="flights-container">`;
+            flightsHtml += `<div class="flights-header">✈️ ${data.departure} → ${data.arrival}</div>`;
+            flightsHtml += `<div class="flight-date">📅 ${data.outbound_date}${data.return_date ? ' - ' + data.return_date : ' (Tek yön)'}</div>`;
+            flightsHtml += `<div class="price-disclaimer">⚠️ Fiyatlar anlık değişebilir. Güncel fiyat için tıklayın.</div>`;
+
+            if (data.flights && data.flights.length > 0) {
+                flightsHtml += `<div class="flights-list">`;
+
+                data.flights.forEach((flight, index) => {
+                    const totalDuration = flight.total_duration ? `${Math.floor(flight.total_duration / 60)}s ${flight.total_duration % 60}dk` : '';
+
+                    flightsHtml += `
+                        <div class="flight-card">
+                            <div class="flight-card-header">
+                                <div class="flight-price">${currencySymbol}${flight.price || 'N/A'}</div>
+                                ${totalDuration ? `<div class="flight-duration">⏱️ ${totalDuration}</div>` : ''}
+                            </div>
+                            <div class="flight-segments">
+                    `;
+
+                    // Her segment için
+                    flight.flights.forEach((segment, segIndex) => {
+                        flightsHtml += `
+                            <div class="flight-segment">
+                                <div class="segment-airline">
+                                    ${segment.airline_logo ? `<img src="${segment.airline_logo}" alt="${segment.airline}" class="airline-logo">` : ''}
+                                    <span class="airline-name">${segment.airline || 'Havayolu'}</span>
+                                    <span class="flight-number">${segment.flight_number || ''}</span>
+                                </div>
+                                <div class="segment-route">
+                                    <div class="segment-departure">
+                                        <div class="segment-time">${segment.departure_time || ''}</div>
+                                        <div class="segment-airport">${segment.departure_code || ''}</div>
+                                    </div>
+                                    <div class="segment-arrow">
+                                        <div class="segment-duration">${segment.duration ? Math.floor(segment.duration / 60) + 's ' + (segment.duration % 60) + 'dk' : ''}</div>
+                                        <div class="arrow-line"></div>
+                                    </div>
+                                    <div class="segment-arrival">
+                                        <div class="segment-time">${segment.arrival_time || ''}</div>
+                                        <div class="segment-airport">${segment.arrival_code || ''}</div>
+                                    </div>
+                                </div>
+                                ${segment.travel_class ? `<div class="segment-class">${segment.travel_class}</div>` : ''}
+                            </div>
+                        `;
+
+                        // Segment aralarına aktarma göstergesi
+                        if (segIndex < flight.flights.length - 1) {
+                            flightsHtml += `<div class="layover-indicator">🔄 Aktarma</div>`;
+                        }
+                    });
+
+                    // Booking URL: önce uçuşun kendi URL'i, yoksa genel arama
+                    const bookingUrl = flight.booking_url || data.google_flights_url;
+
+                    flightsHtml += `
+                            </div>
+                            <div class="flight-card-footer">
+                                <a href="${bookingUrl}" target="_blank" class="ticket-button">
+                                    🎫 Bilet Al
+                                </a>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                flightsHtml += `</div>`;
+            } else {
+                flightsHtml += `<p style="color: #6b7280; text-align: center; padding: 20px;">Üzgünüm, uçuş bulunamadı.</p>`;
+            }
+
+            flightsHtml += `</div>`;
+
+            const flightsContainer = document.createElement('div');
+            flightsContainer.innerHTML = flightsHtml;
+            resultsContent.appendChild(flightsContainer.firstChild);
+        }
+
+        function showTypingIndicator() {
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message assistant';
+            typingDiv.id = 'typingIndicator';
+            typingDiv.innerHTML = `
+            <div class="message-avatar">🤖</div>
+            <div class="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        `;
+            chatMessages.appendChild(typingDiv);
+            scrollToBottom();
+        }
+
+        function removeTypingIndicator() {
+            const typingIndicator = document.getElementById('typingIndicator');
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+        }
+
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+    </script>
+</body>
+
+</html>
