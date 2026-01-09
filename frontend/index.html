@@ -389,9 +389,20 @@
                 hotelsHtml += `<div class="hotels-grid">`;
 
                 data.hotels.forEach((hotel, index) => {
+                    // Otel resmi veya placeholder
+                    const hotelImage = hotel.image 
+                        ? `<img src="${hotel.image}" alt="${hotel.name}" class="hotel-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                           <div class="hotel-image-placeholder" style="display:none;"></div>`
+                        : `<div class="hotel-image-placeholder"></div>`;
+                    
+                    // Harita linki - otel adıyla arama yap
+                    const mapUrl = hotel.latitude && hotel.longitude
+                        ? `https://www.google.com/maps/search/${encodeURIComponent(hotel.name)}/@${hotel.latitude},${hotel.longitude},17z`
+                        : null;
+                    
                     hotelsHtml += `
                         <div class="hotel-card">
-                            <div class="hotel-image-placeholder"></div>
+                            ${hotelImage}
                             <div class="hotel-card-content">
                                 <div class="hotel-name">${hotel.name || 'İsimsiz Otel'}</div>
                                 
@@ -419,8 +430,8 @@
                                     </div>
                                 ` : ''}
                                 
-                                ${hotel.latitude && hotel.longitude ? `
-                                    <a href="https://www.google.com/maps/search/?api=1&query=${hotel.latitude},${hotel.longitude}" target="_blank" class="map-button">
+                                ${mapUrl ? `
+                                    <a href="${mapUrl}" target="_blank" class="map-button">
                                         📍 Haritada Gör
                                     </a>
                                 ` : ''}
