@@ -58,13 +58,17 @@ tools = [
         "type": "function",
         "function": {
             "name": "get_weather",
-            "description": "Belirtilen şehir için güncel hava durumu bilgisini getirir.",
+            "description": "Belirtilen şehir için hava durumu bilgisini getirir. Anlık veya 5 güne kadar tahmin alınabilir.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "city": {
                         "type": "string",
                         "description": "Hava durumu sorgulanacak şehir adı"
+                    },
+                    "days": {
+                        "type": "integer",
+                        "description": "Kaç günlük tahmin isteniyor (1=anlık/bugün, 2-5=çok günlük tahmin). Varsayılan 1."
                     }
                 },
                 "required": ["city"]
@@ -136,7 +140,7 @@ llm_with_tools = llm.bind_tools(tools)
 def chatbot(state: State) -> State:
     messages = state["messages"]
     
-    # Sistem promptu - TOOL KULLANIMI ÖNCELİKLİ!
+    # Sistem promptu
     system_prompt = """Sen "TravelAI" adında profesyonel bir seyahat asistanısın.
  KRİTİK KURALLAR (MUTLAKA TAKİP ET):
 1. HAVA DURUMU: Kullanıcı bir şehir için hava durumu sorarsa veya seyahat planında hava bilgisi isterse → MUTLAKA get_weather() tool'unu kullan.
@@ -175,7 +179,8 @@ def tool_node(state: State) -> State:
         for tool_call in last_message.tool_calls:
             if tool_call["name"] == "get_weather":
                 city = tool_call["args"]["city"]
-                weather_data = get_weather(city)
+                days = tool_call["args"].get("days", 1)
+                weather_data = get_weather(city, days)
                 
                 if "error" in weather_data:
                     result = weather_data["error"]
@@ -237,7 +242,7 @@ def should_continue(state: State) -> str:
         return "tools"
     return "end"
 
-# Graph oluştur
+# Graph yapısı
 graph_builder = StateGraph(State)
 graph_builder.add_node("chatbot", chatbot)
 graph_builder.add_node("tools", tool_node)
@@ -253,7 +258,7 @@ graph_builder.add_conditional_edges(
 )
 graph_builder.add_edge("tools", "chatbot")
 
-# Memory aktif - Her kullanıcı için konuşma geçmişi saklanır
+# Memory 
 memory = MemorySaver()
 graph = graph_builder.compile(checkpointer=memory)
 
@@ -283,7 +288,7 @@ async def websocket_endpoint(websocket: WebSocket):
             
             print(f"Processing message: {user_message}")
             
-            # LangGraph ile işle - Memory AÇIK!
+           
             try:
                 state = {"messages": [HumanMessage(content=user_message)]}
                 config = {"configurable": {"thread_id": thread_id}}
@@ -292,14 +297,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 final_state = graph.invoke(state, config=config)
                 print(f"Graph completed successfully")
             
-                # Son AI mesajını ve tool verilerini bul
                 messages = final_state["messages"]
                 last_ai_message = None
                 weather_data = None
                 hotel_data = None
                 flight_data = None
                 
-                # DEBUG: Tüm mesajları logla
+               
                 print(f"\n📋 Total messages in state: {len(messages)}")
                 for i, msg in enumerate(messages):
                     msg_type = type(msg).__name__
@@ -314,20 +318,20 @@ async def websocket_endpoint(websocket: WebSocket):
                     else:
                         print(f"  [{i}] {msg_type}")
                 
-                # Son HumanMessage'ın index'ini bul
+                
                 last_human_index = -1
                 for i, msg in enumerate(messages):
                     if isinstance(msg, HumanMessage):
                         last_human_index = i
                 
-                # Son AI mesajını bul (tool call olmayan)
+                
                 for msg in reversed(messages):
                     if isinstance(msg, AIMessage) and not last_ai_message:
                         if not (hasattr(msg, 'tool_calls') and msg.tool_calls):
                             last_ai_message = msg
                             break
                 
-                # Son HumanMessage'dan SONRA gelen TÜM ToolMessage'ları al
+                
                 if last_human_index >= 0:
                     recent_messages = messages[last_human_index + 1:]
                     
@@ -340,7 +344,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                 if "hotels" in parsed_data and not hotel_data:
                                     hotel_data = parsed_data
                                     print("✅ Found hotel data")
-                                elif "temperature" in parsed_data and not weather_data:
+                                elif "forecasts" in parsed_data and not weather_data:
                                     weather_data = parsed_data
                                     print("✅ Found weather data")
                                 elif "flights" in parsed_data and not flight_data:
@@ -351,7 +355,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                 pass
 
             
-                # Yanıtı gönder
+              
                 if hotel_data and "error" not in hotel_data:
                     print(f"Sending hotel data: {json.dumps(hotel_data, indent=2)}")
                     await websocket.send_text(json.dumps({
@@ -373,7 +377,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "data": flight_data
                     }))
                 
-                # Eğer hiç tool sonucu yoksa AI mesajı gönder
+            
                 if not hotel_data and not weather_data and not flight_data and last_ai_message and last_ai_message.content:
                     print(f"Sending AI message: {last_ai_message.content}")
                     await websocket.send_text(json.dumps({

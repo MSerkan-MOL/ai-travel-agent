@@ -2,32 +2,152 @@
 import os
 import requests
 from dotenv import load_dotenv
+from datetime import datetime
 load_dotenv()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
 SERP_API_KEY = os.getenv("SERP_API_KEY")
-def get_weather(city: str) -> dict:
-    """Belirtilen şehir için hava durumu bilgisi getirir."""
-    api_url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
-    
-    try:
-        response = requests.get(api_url)
-        response.raise_for_status()
-        data = response.json()
 
-        weather_info = {
-            "city": data["name"],
-            "temperature": data["main"]["temp"],
-            "description": data["weather"][0]["description"],
-            "feels_like": data["main"]["feels_like"],
-            "humidity": data["main"]["humidity"]
-        }
-        return weather_info
-    except requests.exceptions.RequestException as e:
-        return {"error": f"Hava durumu bilgisi alınamadı: {str(e)}"}
-    except KeyError:
-        return {"error": "Hava durumu verisi işlenemedi"}
+# İngilizce -> Türkçe hava durumu çevirileri
+WEATHER_TRANSLATIONS = {
+    "clear sky": "Açık",
+    "few clouds": "Az Bulutlu",
+    "scattered clouds": "Parçalı Bulutlu",
+    "broken clouds": "Çok Bulutlu",
+    "overcast clouds": "Kapalı",
+    "shower rain": "Sağanak Yağışlı",
+    "rain": "Yağmurlu",
+    "light rain": "Hafif Yağmurlu",
+    "moderate rain": "Orta Şiddetli Yağmur",
+    "heavy intensity rain": "Şiddetli Yağmur",
+    "thunderstorm": "Gök Gürültülü Fırtına",
+    "snow": "Karlı",
+    "light snow": "Hafif Karlı",
+    "heavy snow": "Yoğun Kar",
+    "mist": "Sisli",
+    "fog": "Yoğun Sis",
+    "haze": "Puslu",
+    "dust": "Tozlu",
+    "smoke": "Dumanlı",
+    "drizzle": "Çiseleyen Yağmur",
+    "light intensity drizzle": "Hafif Çiseleyen"
+}
+
+# Hava durumu tipi belirleme (efektler için)
+def get_weather_type(description: str) -> str:
+    desc_lower = description.lower()
+    if "rain" in desc_lower or "drizzle" in desc_lower or "shower" in desc_lower:
+        return "rainy"
+    elif "snow" in desc_lower:
+        return "snowy"
+    elif "cloud" in desc_lower or "overcast" in desc_lower:
+        return "cloudy"
+    elif "thunder" in desc_lower or "storm" in desc_lower:
+        return "stormy"
+    elif "clear" in desc_lower:
+        return "sunny"
+    elif "mist" in desc_lower or "fog" in desc_lower or "haze" in desc_lower:
+        return "foggy"
+    else:
+        return "default"
+
+def translate_weather(description: str) -> str:
+    """İngilizce hava durumu açıklamasını Türkçeye çevirir."""
+    return WEATHER_TRANSLATIONS.get(description.lower(), description.capitalize())
+
+def get_weather(city: str, days: int = 1) -> dict:
+    """Belirtilen şehir için hava durumu bilgisi getirir.
+    
+    Args:
+        city: Şehir adı
+        days: Kaç günlük tahmin (1-5 arası, 1=sadece bugün)
+    """
+    # days parametresini sınırla
+    days = max(1, min(5, days))
+    
+    if days == 1:
+        # Anlık hava durumu
+        api_url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric&lang=tr"
+        
+        try:
+            response = requests.get(api_url)
+            response.raise_for_status()
+            data = response.json()
+            
+            description_en = data["weather"][0]["description"]
+            
+            weather_info = {
+                "city": data["name"],
+                "type": "current",
+                "forecasts": [{
+                    "date": datetime.now().strftime("%d %B %Y"),
+                    "day_name": get_turkish_day_name(datetime.now().weekday()),
+                    "temperature": round(data["main"]["temp"]),
+                    "description": translate_weather(description_en),
+                    "description_en": description_en,
+                    "weather_type": get_weather_type(description_en),
+                    "feels_like": round(data["main"]["feels_like"]),
+                    "humidity": data["main"]["humidity"],
+                    "icon": data["weather"][0]["icon"]
+                }]
+            }
+            return weather_info
+        except requests.exceptions.RequestException as e:
+            return {"error": f"Hava durumu bilgisi alınamadı: {str(e)}"}
+        except KeyError:
+            return {"error": "Hava durumu verisi işlenemedi"}
+    else:
+        # 5 günlük tahmin
+        api_url = f"http://api.openweathermap.org/data/2.5/forecast?q={city}&appid={WEATHER_API_KEY}&units=metric&lang=tr"
+        
+        try:
+            response = requests.get(api_url)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Her gün için öğlen 12:00 tahminini al
+            daily_forecasts = {}
+            for item in data["list"]:
+                dt = datetime.fromtimestamp(item["dt"])
+                date_str = dt.strftime("%Y-%m-%d")
+                
+                # Her gün için sadece bir tahmin al (öğlen saatine en yakın)
+                if date_str not in daily_forecasts:
+                    hour = dt.hour
+                    if 11 <= hour <= 14:  # Öğlen saatleri
+                        description_en = item["weather"][0]["description"]
+                        daily_forecasts[date_str] = {
+                            "date": dt.strftime("%d %B"),
+                            "day_name": get_turkish_day_name(dt.weekday()),
+                            "temperature": round(item["main"]["temp"]),
+                            "description": translate_weather(description_en),
+                            "description_en": description_en,
+                            "weather_type": get_weather_type(description_en),
+                            "feels_like": round(item["main"]["feels_like"]),
+                            "humidity": item["main"]["humidity"],
+                            "icon": item["weather"][0]["icon"]
+                        }
+            
+            # İstenen gün sayısı kadar al
+            forecasts = list(daily_forecasts.values())[:days]
+            
+            weather_info = {
+                "city": data["city"]["name"],
+                "type": "forecast",
+                "days": days,
+                "forecasts": forecasts
+            }
+            return weather_info
+        except requests.exceptions.RequestException as e:
+            return {"error": f"Hava durumu bilgisi alınamadı: {str(e)}"}
+        except KeyError as e:
+            return {"error": f"Hava durumu verisi işlenemedi: {str(e)}"}
+
+def get_turkish_day_name(weekday: int) -> str:
+    """Haftanın gününü Türkçe olarak döndürür."""
+    days = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
+    return days[weekday]
 
 
 
@@ -36,7 +156,7 @@ def search_hotels(location: str, budget: int = None, star_rating: int = None) ->
     import datetime
     api_url = "https://serpapi.com/search.json"
     
-    # Varsayılan tarihler (bugün + 30 gün ve + 31 gün)
+
     today = datetime.date.today()
     check_in = today + datetime.timedelta(days=30)
     check_out = check_in + datetime.timedelta(days=1)

@@ -299,25 +299,68 @@
             const resultsPanel = document.getElementById('resultsPanel');
             resultsPanel.classList.add('visible');
 
-            // Eğer zaten weather card varsa güncelle, yoksa yeni ekle
-            let weatherDiv = resultsContent.querySelector('.weather-card');
-            if (!weatherDiv) {
-                weatherDiv = document.createElement('div');
-                weatherDiv.className = 'weather-card';
-                weatherDiv.style.marginBottom = '16px';
-                // Weather card'ı en üste ekle
-                resultsContent.insertBefore(weatherDiv, resultsContent.firstChild);
+            // Eski weather container'ı kaldır
+            const oldWeather = resultsContent.querySelector('.weather-container');
+            if (oldWeather) {
+                oldWeather.remove();
             }
 
-            weatherDiv.innerHTML = `
-                <div class="city">${data.city}</div>
-                <div class="temp">${Math.round(data.temperature)}°C</div>
-                <div class="description">${data.description}</div>
-                <div class="details">
-                    <span>Hissedilen: ${Math.round(data.feels_like)}°C</span>
-                    <span>Nem: ${data.humidity}%</span>
-                </div>
+            // Yeni yapı: forecasts array'i var
+            const forecasts = data.forecasts || [];
+            const firstForecast = forecasts[0] || {};
+            const weatherType = firstForecast.weather_type || 'default';
+
+            let weatherHtml = `<div class="weather-container" style="margin-bottom: 16px;">`;
+
+            // Ana hava durumu kartı
+            weatherHtml += `
+                <div class="weather-card ${weatherType}">
+                    <div class="city">📍 ${data.city}</div>
+                    <div class="temp">${firstForecast.temperature || 0}°C</div>
+                    <div class="description">${firstForecast.description || ''}</div>
+                    <div class="details">
+                        <span>📅 ${firstForecast.day_name || ''}, ${firstForecast.date || ''}</span>
             `;
+
+            if (firstForecast.feels_like !== undefined) {
+                weatherHtml += `<span>🌡️ Hissedilen: ${firstForecast.feels_like}°C</span>`;
+            }
+            if (firstForecast.humidity !== undefined) {
+                weatherHtml += `<span>💧 Nem: ${firstForecast.humidity}%</span>`;
+            }
+
+            weatherHtml += `</div></div>`;
+
+            // Çoklu gün tahmini varsa grid göster
+            if (forecasts.length > 1) {
+                weatherHtml += `<div class="weather-forecast-grid">`;
+
+                forecasts.forEach((forecast, index) => {
+                    if (index === 0) return; // İlk günü zaten gösterdik
+
+                    const fType = forecast.weather_type || 'default';
+                    weatherHtml += `
+                        <div class="weather-forecast-card ${fType}">
+                            <div class="forecast-day">${forecast.day_name || ''}</div>
+                            <div class="forecast-date">${forecast.date || ''}</div>
+                            <div class="forecast-temp">${forecast.temperature || 0}°C</div>
+                            <div class="forecast-desc">${forecast.description || ''}</div>
+                            <div class="forecast-details">
+                                💧 ${forecast.humidity || 0}%
+                            </div>
+                        </div>
+                    `;
+                });
+
+                weatherHtml += `</div>`;
+            }
+
+            weatherHtml += `</div>`;
+
+            // Append et
+            const weatherContainer = document.createElement('div');
+            weatherContainer.innerHTML = weatherHtml;
+            resultsContent.insertBefore(weatherContainer.firstChild, resultsContent.firstChild);
         }
 
         function addHotelsToPanel(data) {

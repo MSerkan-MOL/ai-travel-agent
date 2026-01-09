@@ -151,18 +151,243 @@ body {
     border-radius: 16px;
     margin-top: 10px;
     box-shadow: 0 8px 24px rgba(247, 127, 0, 0.25);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Haftalık tahmin grid */
+.weather-forecast-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.weather-forecast-card {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    padding: 16px;
+    border-radius: 12px;
+    text-align: center;
+    transition: transform 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.weather-forecast-card:hover {
+    transform: translateY(-4px);
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.forecast-day {
+    font-size: 14px;
+    font-weight: 600;
+    opacity: 0.9;
+    margin-bottom: 4px;
+}
+
+.forecast-date {
+    font-size: 12px;
+    opacity: 0.8;
+    margin-bottom: 8px;
+}
+
+.forecast-temp {
+    font-size: 28px;
+    font-weight: 800;
+    margin-bottom: 4px;
+}
+
+.forecast-desc {
+    font-size: 13px;
+    opacity: 0.95;
+}
+
+.forecast-details {
+    font-size: 11px;
+    opacity: 0.8;
+    margin-top: 8px;
+}
+
+/* Hava Durumu Efektleri */
+
+/* Güneşli */
+.weather-card.sunny,
+.weather-forecast-card.sunny {
+    background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+}
+
+.weather-card.sunny::before {
+    content: '☀️';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 40px;
+    animation: sunPulse 2s ease-in-out infinite;
+}
+
+@keyframes sunPulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 0.8;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 1;
+    }
+}
+
+/* Yağmurlu */
+.weather-card.rainy,
+.weather-forecast-card.rainy {
+    background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+}
+
+.weather-card.rainy::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image:
+        linear-gradient(transparent 60%, rgba(255, 255, 255, 0.3) 60%, rgba(255, 255, 255, 0.3) 61%, transparent 61%);
+    background-size: 15px 30px;
+    animation: rain 0.5s linear infinite;
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+@keyframes rain {
+    0% {
+        background-position: 0 0;
+    }
+
+    100% {
+        background-position: 15px 30px;
+    }
+}
+
+/* Karlı */
+.weather-card.snowy,
+.weather-forecast-card.snowy {
+    background: linear-gradient(135deg, #94a3b8 0%, #e2e8f0 100%);
+    color: #1e293b;
+}
+
+.weather-card.snowy::before {
+    content: '❄️';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 35px;
+    animation: snowfall 3s ease-in-out infinite;
+}
+
+@keyframes snowfall {
+
+    0%,
+    100% {
+        transform: translateY(0) rotate(0deg);
+        opacity: 0.8;
+    }
+
+    50% {
+        transform: translateY(5px) rotate(180deg);
+        opacity: 1;
+    }
+}
+
+/* Bulutlu */
+.weather-card.cloudy,
+.weather-forecast-card.cloudy {
+    background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);
+}
+
+.weather-card.cloudy::before {
+    content: '☁️';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 35px;
+    animation: cloudFloat 4s ease-in-out infinite;
+}
+
+@keyframes cloudFloat {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    50% {
+        transform: translateX(5px);
+    }
+}
+
+/* Fırtınalı */
+.weather-card.stormy,
+.weather-forecast-card.stormy {
+    background: linear-gradient(135deg, #1e3a5f 0%, #374151 100%);
+}
+
+.weather-card.stormy::before {
+    content: '⛈️';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 35px;
+    animation: lightning 2s ease-in-out infinite;
+}
+
+@keyframes lightning {
+
+    0%,
+    90%,
+    100% {
+        opacity: 0.8;
+    }
+
+    92%,
+    94% {
+        opacity: 1;
+        filter: brightness(1.5);
+    }
+}
+
+/* Sisli */
+.weather-card.foggy,
+.weather-forecast-card.foggy {
+    background: linear-gradient(135deg, #9ca3af 0%, #d1d5db 100%);
+    color: #374151;
+}
+
+.weather-card.foggy::before {
+    content: '🌫️';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 35px;
+    opacity: 0.7;
 }
 
 .weather-card .city {
     font-size: 22px;
     font-weight: 700;
     margin-bottom: 12px;
+    position: relative;
+    z-index: 1;
 }
 
 .weather-card .temp {
     font-size: 42px;
     font-weight: 800;
     margin-bottom: 8px;
+    position: relative;
+    z-index: 1;
 }
 
 .weather-card .description {
@@ -170,6 +395,8 @@ body {
     opacity: 0.95;
     margin-bottom: 16px;
     text-transform: capitalize;
+    position: relative;
+    z-index: 1;
 }
 
 .weather-card .details {
@@ -177,6 +404,8 @@ body {
     justify-content: space-between;
     font-size: 15px;
     opacity: 0.9;
+    position: relative;
+    z-index: 1;
 }
 
 /* PREMIUM HOTEL CARDS */
