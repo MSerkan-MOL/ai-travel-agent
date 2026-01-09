@@ -98,14 +98,6 @@ ai-travel-agent/
     └── style.css     # Stiller
 ```
 
-## 🎯 Kullanım Örnekleri
-
-```
-"İstanbul'da hava durumu nasıl?"
-"Paris'te 4 yıldızlı otel ara"
-"İstanbul'dan Londra'ya 15 Ocak'ta uçuş bul"
-"Bali için seyahat planı hazırla"
-```
 
 ## 🔧 API Anahtarları Nasıl Alınır?
 
@@ -115,11 +107,7 @@ ai-travel-agent/
 | OpenWeatherMap | https://openweathermap.org/api |
 | SerpAPI | https://serpapi.com/ |
 
-## 📝 Lisans
 
-Bu proje eğitim amaçlı geliştirilmiştir.
 
-## 👤 Geliştirici
 
-**MSerkan-MOL**
-- GitHub: [@MSerkan-MOL](https://github.com/MSerkan-MOL)
+
